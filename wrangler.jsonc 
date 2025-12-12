@@ -1,0 +1,7 @@
+{
+  "name": "csv-flight-processor",
+  "compatibility_date": "2025-12-12",
+  "assets": {
+    "directory": "."
+  }
+}

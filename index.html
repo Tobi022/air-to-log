@@ -103,7 +103,7 @@
             </div>
             <div class="checkbox-option">
                 <input type="checkbox" id="replaceAircraftType" checked>
-                <label for="replaceAircraftType">Replace Aircraft Type (E95 → E195)</label>
+                <label for="replaceAircraftType">Replace Aircraft Type (E95 → E190)</label>
             </div>
         </div>
         
@@ -193,7 +193,7 @@
                         }
                     } else if (key === 'Aircraft Type' && replaceAircraftType && row[key]) {
                         const type = row[key].toString().trim();
-                        newRow[key] = type === 'E95' ? 'E195' : type;
+                        newRow[key] = type === 'E95' ? 'E190' : type;
                     } else {
                         newRow[key] = row[key];
                     }

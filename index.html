@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CSV Flight Data Processor</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        .upload-section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 2px dashed #ccc;
+            border-radius: 4px;
+            text-align: center;
+        }
+        .options-section {
+            margin: 20px 0;
+            padding: 15px;
+            background-color: #f9f9f9;
+            border-radius: 4px;
+        }
+        .checkbox-option {
+            margin: 10px 0;
+            display: flex;
+            align-items: center;
+        }
+        .checkbox-option input {
+            margin-right: 10px;
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+        .checkbox-option label {
+            cursor: pointer;
+            font-size: 14px;
+        }
+        input[type="file"] {
+            margin: 10px 0;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-top: 10px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        .status {
+            margin-top: 20px;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>CSV Flight Data Processor</h1>
+        <p>Upload a CSV file with a "Flight" column (format: SK2471-20251210-ARN-TRD)</p>
+        
+        <div class="options-section">
+            <h3>Optional Modifications:</h3>
+            <div class="checkbox-option">
+                <input type="checkbox" id="formatAircraftReg" checked>
+                <label for="formatAircraftReg">Format Aircraft Registration (SERSX → SE-RSX)</label>
+            </div>
+            <div class="checkbox-option">
+                <input type="checkbox" id="replaceAircraftType" checked>
+                <label for="replaceAircraftType">Replace Aircraft Type (E95 → E195)</label>
+            </div>
+        </div>
+        
+        <div class="upload-section">
+            <input type="file" id="csvFile" accept=".csv" />
+            <br>
+            <button id="downloadBtn" disabled>Download Modified CSV</button>
+        </div>
+        
+        <div id="status"></div>
+    </div>
+
+    <script>
+        let processedData = null;
+        
+        document.getElementById('csvFile').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            showStatus('Processing file...', 'info');
+            
+            Papa.parse(file, {
+                header: true,
+                skipEmptyLines: true,
+                complete: function(results) {
+                    try {
+                        const formatReg = document.getElementById('formatAircraftReg').checked;
+                        const replaceType = document.getElementById('replaceAircraftType').checked;
+                        processedData = processFlightData(results.data, formatReg, replaceType);
+                        showStatus(`Success! Processed ${processedData.length} rows. Click download to get your file.`, 'success');
+                        document.getElementById('downloadBtn').disabled = false;
+                    } catch (error) {
+                        showStatus('Error: ' + error.message, 'error');
+                        document.getElementById('downloadBtn').disabled = true;
+                    }
+                },
+                error: function(error) {
+                    showStatus('Error parsing CSV: ' + error.message, 'error');
+                }
+            });
+        });
+        
+        document.getElementById('downloadBtn').addEventListener('click', function() {
+            if (!processedData) return;
+            
+            const csv = Papa.unparse(processedData);
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            
+            link.setAttribute('href', url);
+            link.setAttribute('download', 'modified_flight_data.csv');
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            showStatus('File downloaded successfully!', 'success');
+        });
+        
+        function processFlightData(data, formatAircraftReg, replaceAircraftType) {
+            return data.map(row => {
+                const newRow = {};
+                
+                // Process each property in the row, filtering out empty keys
+                for (let key in row) {
+                    // Skip empty or whitespace-only keys
+                    if (!key || !key.trim()) continue;
+                    
+                    if (key === 'Flight' && row[key]) {
+                        const parts = row[key].split('-');
+                        if (parts.length >= 4) {
+                            newRow['Flight'] = parts[0];
+                            newRow['Departure-Place'] = parts[2];
+                            newRow['Destination-Place'] = parts[3];
+                        } else {
+                            newRow['Flight'] = row[key];
+                            newRow['Departure-Place'] = '';
+                            newRow['Destination-Place'] = '';
+                        }
+                    } else if (key === 'Aircraft Registration' && formatAircraftReg && row[key]) {
+                        const reg = row[key].toString().trim();
+                        if (reg.length >= 3) {
+                            newRow[key] = reg.substring(0, 2) + '-' + reg.substring(2);
+                        } else {
+                            newRow[key] = reg;
+                        }
+                    } else if (key === 'Aircraft Type' && replaceAircraftType && row[key]) {
+                        const type = row[key].toString().trim();
+                        newRow[key] = type === 'E95' ? 'E195' : type;
+                    } else {
+                        newRow[key] = row[key];
+                    }
+                }
+                
+                return newRow;
+            });
+        }
+        
+        function showStatus(message, type) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = message;
+            statusDiv.className = 'status ' + type;
+        }
+    </script>
+</body>
+</html>

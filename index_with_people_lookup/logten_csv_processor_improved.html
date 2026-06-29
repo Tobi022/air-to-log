@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LogTen CSV Flight Data Processor</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+  <style>
+    :root {
+      --bg: #eef2f7;
+      --panel: #ffffff;
+      --text: #172033;
+      --muted: #64748b;
+      --line: #d8e0ea;
+      --primary: #2563eb;
+      --primary-dark: #1d4ed8;
+      --ok-bg: #dcfce7;
+      --ok: #166534;
+      --warn-bg: #fef3c7;
+      --warn: #92400e;
+      --err-bg: #fee2e2;
+      --err: #991b1b;
+      --info-bg: #dbeafe;
+      --info: #1e40af;
+      --shadow: 0 18px 45px rgba(15, 23, 42, 0.10);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+      background: radial-gradient(circle at top left, #dbeafe 0, transparent 32rem), var(--bg);
+      color: var(--text);
+    }
+
+    .page {
+      width: min(1120px, calc(100% - 32px));
+      margin: 32px auto;
+    }
+
+    .hero {
+      background: linear-gradient(135deg, #111827, #1e3a8a);
+      color: white;
+      padding: 32px;
+      border-radius: 24px;
+      box-shadow: var(--shadow);
+      margin-bottom: 20px;
+    }
+
+    .hero h1 {
+      margin: 0 0 10px;
+      font-size: clamp(28px, 4vw, 44px);
+      letter-spacing: -0.04em;
+    }
+
+    .hero p {
+      margin: 0;
+      max-width: 740px;
+      color: #dbeafe;
+      line-height: 1.55;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.05fr) minmax(300px, 0.95fr);
+      gap: 20px;
+      align-items: start;
+    }
+
+    @media (max-width: 900px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+
+    .card {
+      background: rgba(255,255,255,0.92);
+      backdrop-filter: blur(14px);
+      border: 1px solid rgba(216,224,234,0.85);
+      border-radius: 20px;
+      box-shadow: var(--shadow);
+      padding: 22px;
+      margin-bottom: 20px;
+    }
+
+    .card h2 {
+      margin: 0 0 8px;
+      font-size: 20px;
+      letter-spacing: -0.02em;
+    }
+
+    .subtext {
+      margin: 0 0 18px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .step-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .step-number {
+      width: 30px;
+      height: 30px;
+      border-radius: 999px;
+      background: var(--primary);
+      color: white;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 14px;
+      flex: 0 0 auto;
+    }
+
+    .dropzone {
+      border: 2px dashed #bdd0e8;
+      background: #f8fbff;
+      border-radius: 16px;
+      padding: 18px;
+      margin-top: 12px;
+    }
+
+    .file-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 12px;
+      align-items: center;
+    }
+
+    input[type="file"] {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: white;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: #edf4ff;
+      color: #1d4ed8;
+      font-size: 13px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .options {
+      display: grid;
+      gap: 10px;
+    }
+
+    .option {
+      border: 1px solid var(--line);
+      background: #fbfdff;
+      border-radius: 14px;
+      padding: 12px 14px;
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+    }
+
+    .option input {
+      width: 18px;
+      height: 18px;
+      margin-top: 2px;
+      accent-color: var(--primary);
+    }
+
+    .option strong { display: block; margin-bottom: 3px; }
+    .option span { display: block; color: var(--muted); font-size: 13px; line-height: 1.35; }
+
+    .status {
+      padding: 12px 14px;
+      border-radius: 14px;
+      font-weight: 650;
+      line-height: 1.4;
+      margin-top: 12px;
+    }
+    .success { background: var(--ok-bg); color: var(--ok); }
+    .warning { background: var(--warn-bg); color: var(--warn); }
+    .error { background: var(--err-bg); color: var(--err); }
+    .info { background: var(--info-bg); color: var(--info); }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .metric {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 16px;
+      background: #f8fafc;
+    }
+    .metric .value {
+      font-size: 30px;
+      font-weight: 850;
+      letter-spacing: -0.04em;
+    }
+    .metric .label {
+      color: var(--muted);
+      font-size: 13px;
+      margin-top: 4px;
+    }
+
+    .actions {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    button {
+      appearance: none;
+      border: 0;
+      border-radius: 14px;
+      padding: 13px 16px;
+      background: var(--primary);
+      color: white;
+      font-size: 15px;
+      font-weight: 800;
+      cursor: pointer;
+      transition: transform .12s ease, background .12s ease, opacity .12s ease;
+    }
+    button:hover:not(:disabled) { background: var(--primary-dark); transform: translateY(-1px); }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
+    button.secondary { background: #0f172a; }
+    button.secondary:hover:not(:disabled) { background: #111827; }
+    button.ghost { color: #1f2937; background: #e5e7eb; }
+
+    .table-wrap {
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: white;
+      max-height: 420px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    th, td {
+      padding: 10px 12px;
+      border-bottom: 1px solid #edf2f7;
+      text-align: left;
+      white-space: nowrap;
+    }
+
+    th {
+      position: sticky;
+      top: 0;
+      background: #f8fafc;
+      z-index: 1;
+      color: #475569;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 8px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 800;
+    }
+    .badge.ok { background: var(--ok-bg); color: var(--ok); }
+    .badge.missing { background: var(--err-bg); color: var(--err); }
+    .badge.skipped { background: #e5e7eb; color: #374151; }
+
+    .small-note {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+      margin-top: 12px;
+    }
+
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="hero">
+      <h1>LogTen CSV Flight Data Processor</h1>
+      <p>Convert your flight CSV for LogTen import, optionally match PIC employee numbers to names from your LogTen People export, and preview missing IDs before downloading.</p>
+    </section>
+
+    <section class="grid">
+      <div>
+        <div class="card">
+          <div class="step-title"><span class="step-number">1</span><h2>Upload flight CSV</h2></div>
+          <p class="subtext">Expected flight format: <strong>SK5896-20240527-CPH-MMX</strong>. The processor keeps your original columns except where optional changes are enabled.</p>
+          <div class="dropzone">
+            <div class="file-row">
+              <input type="file" id="csvFile" accept=".csv,text/csv" />
+              <span id="flightFilePill" class="pill">No file</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="step-title"><span class="step-number">2</span><h2>Optional People export</h2></div>
+          <p class="subtext">Upload your LogTen Address Book / People export to match employee IDs in <strong>PIC</strong> against the People <strong>ID</strong> field. This file is read locally in your browser and is not stored in the website.</p>
+          <div class="dropzone">
+            <div class="file-row">
+              <input type="file" id="peopleFile" accept=".txt,.csv,text/plain,text/csv" />
+              <span id="peopleFilePill" class="pill">Optional</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="step-title"><span class="step-number">3</span><h2>Optional modifications</h2></div>
+          <div class="options">
+            <label class="option">
+              <input type="checkbox" id="formatAircraftReg" checked />
+              <span><strong>Format Aircraft Registration</strong><span>Converts values like SERSX to SE-RSX.</span></span>
+            </label>
+            <label class="option">
+              <input type="checkbox" id="replaceAircraftType" checked />
+              <span><strong>Replace Aircraft Type</strong><span>Converts E95 to E190 for LogTen consistency.</span></span>
+            </label>
+            <label class="option">
+              <input type="checkbox" id="replacePicWithName" checked />
+              <span><strong>Replace PIC ID with LogTen name</strong><span>Uses the People export to change PIC employee numbers into names LogTen can match.</span></span>
+            </label>
+            <label class="option">
+              <input type="checkbox" id="keepPicId" checked />
+              <span><strong>Keep original PIC ID column</strong><span>Adds a PIC ID column so the employee number is preserved in the output.</span></span>
+            </label>
+            <label class="option">
+              <input type="checkbox" id="blockMissingPic" />
+              <span><strong>Block download if PIC IDs are missing</strong><span>Prevents import files with unmatched PIC IDs. Useful when you want a clean LogTen import only.</span></span>
+            </label>
+          </div>
+          <div id="status" class="status info">Upload a flight CSV to begin. People matching is optional.</div>
+        </div>
+      </div>
+
+      <aside>
+        <div class="card">
+          <h2>Summary</h2>
+          <p class="subtext">These checks update automatically when files or options change.</p>
+          <div class="summary-grid">
+            <div class="metric"><div id="metricFlights" class="value">0</div><div class="label">Flights processed</div></div>
+            <div class="metric"><div id="metricPeople" class="value">0</div><div class="label">People IDs loaded</div></div>
+            <div class="metric"><div id="metricMatched" class="value">0</div><div class="label">PIC IDs matched</div></div>
+            <div class="metric"><div id="metricMissing" class="value">0</div><div class="label">PIC IDs missing</div></div>
+          </div>
+          <div class="actions">
+            <button id="downloadBtn" disabled>Download LogTen CSV</button>
+            <button id="downloadMissingBtn" class="secondary" disabled>Download unknown PIC IDs</button>
+            <button id="resetBtn" class="ghost">Reset</button>
+          </div>
+          <p class="small-note">Privacy: no database is required. All parsing and matching happens in this browser tab.</p>
+        </div>
+
+        <div class="card">
+          <h2>PIC matching preview</h2>
+          <p class="subtext">Shows the unique PIC values found in the flight CSV.</p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>PIC ID</th><th>Matched name</th><th>Status</th></tr></thead>
+              <tbody id="previewBody"><tr><td colspan="3">No flight CSV loaded yet.</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+      </aside>
+    </section>
+  </main>
+
+  <script>
+    let flightRows = [];
+    let peopleRows = [];
+    let peopleById = new Map();
+    let duplicateIds = new Map();
+    let processedData = null;
+    let previewRows = [];
+
+    const el = id => document.getElementById(id);
+    const optionIds = ['formatAircraftReg', 'replaceAircraftType', 'replacePicWithName', 'keepPicId', 'blockMissingPic'];
+
+    el('csvFile').addEventListener('change', handleFlightFile);
+    el('peopleFile').addEventListener('change', handlePeopleFile);
+    optionIds.forEach(id => el(id).addEventListener('change', recompute));
+    el('downloadBtn').addEventListener('click', downloadProcessedCsv);
+    el('downloadMissingBtn').addEventListener('click', downloadUnknownPicCsv);
+    el('resetBtn').addEventListener('click', resetAll);
+
+    function handleFlightFile(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      el('flightFilePill').textContent = file.name;
+      showStatus('Processing flight CSV...', 'info');
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        complete: results => {
+          try {
+            flightRows = (results.data || []).filter(row => Object.keys(row).some(k => k && String(row[k] || '').trim() !== ''));
+            recompute();
+          } catch (error) {
+            showStatus('Error processing flight CSV: ' + error.message, 'error');
+          }
+        },
+        error: error => showStatus('Error parsing flight CSV: ' + error.message, 'error')
+      });
+    }
+
+    function handlePeopleFile(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      el('peopleFilePill').textContent = file.name;
+      showStatus('Reading People export...', 'info');
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        delimiter: '',
+        complete: results => {
+          try {
+            peopleRows = results.data || [];
+            buildPeopleLookup(peopleRows);
+            recompute();
+          } catch (error) {
+            showStatus('Error processing People export: ' + error.message, 'error');
+          }
+        },
+        error: error => showStatus('Error parsing People export: ' + error.message, 'error')
+      });
+    }
+
+    function clean(value) {
+      return String(value ?? '').replace(/\r?\n/g, ' ').trim();
+    }
+
+    function normalizeKey(key) {
+      return clean(key).toLowerCase();
+    }
+
+    function getField(row, fieldName) {
+      const wanted = normalizeKey(fieldName);
+      const key = Object.keys(row).find(k => normalizeKey(k) === wanted);
+      return key ? row[key] : '';
+    }
+
+    function buildPeopleLookup(rows) {
+      peopleById = new Map();
+      duplicateIds = new Map();
+      for (const row of rows) {
+        const id = clean(getField(row, 'ID'));
+        const fullName = clean(getField(row, 'Full Name') || getField(row, 'Name'));
+        if (!id || !fullName) continue;
+        if (peopleById.has(id)) {
+          if (!duplicateIds.has(id)) duplicateIds.set(id, [peopleById.get(id)]);
+          duplicateIds.get(id).push(fullName);
+          continue;
+        }
+        peopleById.set(id, fullName);
+      }
+    }
+
+    function recompute() {
+      if (!flightRows.length) {
+        processedData = null;
+        previewRows = [];
+        updateMetrics();
+        renderPreview();
+        el('downloadBtn').disabled = true;
+        el('downloadMissingBtn').disabled = true;
+        showStatus('Upload a flight CSV to begin. People matching is optional.', 'info');
+        return;
+      }
+
+      const options = getOptions();
+      processedData = processFlightData(flightRows, options);
+      previewRows = buildPicPreview(flightRows, options);
+      const missingCount = previewRows.filter(r => r.status === 'missing').length;
+      const matchedCount = previewRows.filter(r => r.status === 'matched').length;
+
+      updateMetrics();
+      renderPreview();
+
+      el('downloadMissingBtn').disabled = missingCount === 0;
+      const blocked = options.blockMissingPic && options.replacePicWithName && missingCount > 0;
+      el('downloadBtn').disabled = blocked || !processedData.length;
+
+      if (blocked) {
+        showStatus(`Download blocked: ${missingCount} unique PIC ID(s) were not found in the People export.`, 'error');
+      } else if (options.replacePicWithName && !peopleById.size) {
+        showStatus('Flight CSV processed. People matching is enabled, but no People export is loaded, so PIC values are unchanged.', 'warning');
+      } else if (options.replacePicWithName && missingCount > 0) {
+        showStatus(`Processed ${processedData.length} rows. ${matchedCount} unique PIC ID(s) matched, ${missingCount} missing.`, 'warning');
+      } else if (duplicateIds.size > 0) {
+        showStatus(`Processed ${processedData.length} rows. Warning: ${duplicateIds.size} duplicate ID(s) found in People export; the first match was used.`, 'warning');
+      } else {
+        showStatus(`Success. Processed ${processedData.length} rows and ready to download.`, 'success');
+      }
+    }
+
+    function getOptions() {
+      return {
+        formatAircraftReg: el('formatAircraftReg').checked,
+        replaceAircraftType: el('replaceAircraftType').checked,
+        replacePicWithName: el('replacePicWithName').checked,
+        keepPicId: el('keepPicId').checked,
+        blockMissingPic: el('blockMissingPic').checked
+      };
+    }
+
+    function processFlightData(data, options) {
+      return data.map(row => {
+        const newRow = {};
+        for (let key in row) {
+          if (!key || !key.trim()) continue;
+          const value = row[key];
+
+          if (key === 'Flight' && value) {
+            const parts = String(value).split('-');
+            if (parts.length >= 4) {
+              newRow['Flight'] = parts[0];
+              newRow['Departure-Place'] = parts[2];
+              newRow['Destination-Place'] = parts[3];
+            } else {
+              newRow['Flight'] = value;
+              newRow['Departure-Place'] = '';
+              newRow['Destination-Place'] = '';
+            }
+          } else if (key === 'PIC') {
+            const picId = clean(value);
+            if (options.keepPicId) newRow['PIC ID'] = picId;
+            if (options.replacePicWithName && picId && peopleById.has(picId)) {
+              newRow['PIC'] = peopleById.get(picId);
+            } else {
+              newRow['PIC'] = value;
+            }
+          } else if (key === 'Aircraft Registration' && options.formatAircraftReg && value) {
+            const reg = clean(value);
+            newRow[key] = reg.length >= 3 && !reg.includes('-') ? reg.substring(0, 2) + '-' + reg.substring(2) : reg;
+          } else if (key === 'Aircraft Type' && options.replaceAircraftType && value) {
+            const type = clean(value);
+            newRow[key] = type === 'E95' ? 'E190' : type;
+          } else {
+            newRow[key] = value;
+          }
+        }
+        return newRow;
+      });
+    }
+
+    function buildPicPreview(rows, options) {
+      const unique = new Map();
+      rows.forEach(row => {
+        const pic = clean(getField(row, 'PIC'));
+        if (!pic) return;
+        if (!unique.has(pic)) unique.set(pic, { id: pic, count: 0 });
+        unique.get(pic).count += 1;
+      });
+
+      return Array.from(unique.values()).map(item => {
+        if (!options.replacePicWithName) {
+          return { id: item.id, name: 'Matching disabled', status: 'skipped', count: item.count };
+        }
+        if (peopleById.has(item.id)) {
+          return { id: item.id, name: peopleById.get(item.id), status: 'matched', count: item.count };
+        }
+        return { id: item.id, name: 'Not found', status: 'missing', count: item.count };
+      }).sort((a, b) => {
+        const order = { missing: 0, matched: 1, skipped: 2 };
+        return order[a.status] - order[b.status] || a.id.localeCompare(b.id, undefined, { numeric: true });
+      });
+    }
+
+    function updateMetrics() {
+      const matched = previewRows.filter(r => r.status === 'matched').length;
+      const missing = previewRows.filter(r => r.status === 'missing').length;
+      el('metricFlights').textContent = flightRows.length;
+      el('metricPeople').textContent = peopleById.size;
+      el('metricMatched').textContent = matched;
+      el('metricMissing').textContent = missing;
+    }
+
+    function renderPreview() {
+      const body = el('previewBody');
+      if (!previewRows.length) {
+        body.innerHTML = '<tr><td colspan="3">No PIC values to preview yet.</td></tr>';
+        return;
+      }
+      body.innerHTML = previewRows.map(row => {
+        const badgeClass = row.status === 'matched' ? 'ok' : row.status === 'missing' ? 'missing' : 'skipped';
+        return `<tr><td>${escapeHtml(row.id)} <span class="small-note">(${row.count} row${row.count === 1 ? '' : 's'})</span></td><td>${escapeHtml(row.name)}</td><td><span class="badge ${badgeClass}">${row.status}</span></td></tr>`;
+      }).join('');
+    }
+
+    function downloadProcessedCsv() {
+      if (!processedData || !processedData.length) return;
+      downloadCsv(processedData, 'logten_import_modified.csv');
+      showStatus('LogTen CSV downloaded successfully.', 'success');
+    }
+
+    function downloadUnknownPicCsv() {
+      const missing = previewRows.filter(r => r.status === 'missing').map(r => ({ 'PIC ID': r.id, 'Rows': r.count, 'Suggested action': 'Add this person to LogTen People export or correct the flight CSV PIC value' }));
+      if (!missing.length) return;
+      downloadCsv(missing, 'unknown_pic_ids.csv');
+    }
+
+    function downloadCsv(rows, filename) {
+      const csv = Papa.unparse(rows);
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.href = url;
+      link.download = filename;
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    }
+
+    function resetAll() {
+      flightRows = [];
+      peopleRows = [];
+      peopleById = new Map();
+      duplicateIds = new Map();
+      processedData = null;
+      previewRows = [];
+      el('csvFile').value = '';
+      el('peopleFile').value = '';
+      el('flightFilePill').textContent = 'No file';
+      el('peopleFilePill').textContent = 'Optional';
+      recompute();
+    }
+
+    function showStatus(message, type) {
+      const status = el('status');
+      status.textContent = message;
+      status.className = 'status ' + type;
+    }
+
+    function escapeHtml(value) {
+      return String(value).replace(/[&<>'"]/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char]));
+    }
+  </script>
+</body>
+</html>

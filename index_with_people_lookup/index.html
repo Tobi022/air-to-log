@@ -506,6 +506,7 @@
   <script>
     let flightRows = [];
     let peopleRows = [];
+    let peopleRawText = '';
     let peopleById = new Map();
     let duplicateIds = new Map();
     let thisIsMeName = '';
@@ -585,8 +586,9 @@
       const reader = new FileReader();
       reader.onload = () => {
         try {
-          peopleRows = parsePeopleExportText(String(reader.result || ''));
-          buildPeopleLookup(peopleRows);
+          peopleRawText = String(reader.result || '');
+          peopleRows = parsePeopleExportText(peopleRawText);
+          buildPeopleLookup(peopleRows, peopleRawText);
           recompute();
         } catch (error) {
           showStatus('Error processing People export: ' + error.message, 'error');
@@ -626,7 +628,7 @@
     }
     function hasField(row, fieldName) { return Object.keys(row).some(k => normalizeKey(k) === normalizeKey(fieldName)); }
 
-    function buildPeopleLookup(rows) {
+    function buildPeopleLookup(rows, rawText = '') {
       peopleById = new Map();
       duplicateIds = new Map();
       thisIsMeName = '';
@@ -650,7 +652,57 @@
         }
         peopleById.set(id, fullName);
       }
+
+      // Extra safety for LogTen exports: if normal row parsing fails to identify
+      // This is Me, scan the raw tab-separated text by header position. This handles
+      // malformed quoted line breaks and odd spacing from LogTen Address Book exports.
+      if (!thisIsMeName && rawText) {
+        const rawMatch = findThisIsMeFromRawLogTenText(rawText);
+        if (rawMatch && rawMatch.name) {
+          thisIsMeName = rawMatch.name;
+          thisIsMeId = rawMatch.id || '';
+        }
+      }
     }
+
+    function findThisIsMeFromRawLogTenText(text) {
+      const normalized = String(text || '').replace(/^﻿/, '').replace(/
+/g, '
+').replace(/
+/g, '
+');
+      const lines = normalized.split('
+').filter(line => line.trim() !== '');
+      if (!lines.length) return null;
+
+      const headers = lines[0].split('	').map(h => normalizeKey(h));
+      const idxName = headers.indexOf('name');
+      const idxId = headers.indexOf('id');
+      const idxFullName = headers.indexOf('full name');
+      const idxThisIsMe = headers.indexOf('this is me');
+      if (idxThisIsMe < 0) return null;
+
+      for (const line of lines.slice(1)) {
+        const cells = line.split('	').map(cell => clean(cell).replace(/^"|"$/g, '').trim());
+        const flag = clean(cells[idxThisIsMe] || '').toLowerCase();
+        if (isTruthyFlag(flag)) {
+          const fullName = clean(cells[idxFullName] || cells[idxName] || '').replace(/^"|"$/g, '').trim();
+          const id = clean(cells[idxId] || '');
+          if (fullName) return { name: fullName, id };
+        }
+      }
+
+      // Last-resort fallback for the known LogTen export pattern: the row contains
+      // name, ID, full name, then a tab-delimited 1 in the This is Me column.
+      for (const line of lines.slice(1)) {
+        if (/	1	/.test(line)) {
+          const cells = line.split('	').map(cell => clean(cell).replace(/^"|"$/g, '').trim());
+          const fullName = clean(cells[2] || cells[0] || '');
+          const id = clean(cells[1] || '');
+          if (fullName) return { name: fullName, id };
+        }
+      }
+      return null;
 
     function isTruthyFlag(value) {
       const v = clean(value).toLowerCase();
@@ -886,6 +938,7 @@
     function resetAll() {
       flightRows = [];
       peopleRows = [];
+      peopleRawText = '';
       peopleById = new Map();
       duplicateIds = new Map();
       thisIsMeName = '';
